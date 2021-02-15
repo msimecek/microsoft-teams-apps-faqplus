@@ -1,5 +1,5 @@
 {
-  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
     "baseResourceName": {
@@ -204,7 +204,7 @@
       }
     },
     {
-      "apiVersion": "2016-08-01",
+      "apiVersion": "2018-11-01",
       "type": "Microsoft.Web/sites",
       "name": "[variables('botAppName')]",
       "location": "[parameters('location')]",
@@ -222,6 +222,7 @@
         "httpsOnly": true,
         "siteConfig": {
           "alwaysOn": true,
+          "ftpsState": "Disabled",
           "appSettings": [
             {
               "name": "SITE_ROLE",
@@ -377,7 +378,7 @@
     },
     {
       "type": "Microsoft.Web/sites",
-      "apiVersion": "2016-08-01",
+      "apiVersion": "2018-11-01",
       "name": "[variables('configAppName')]",
       "location": "[parameters('location')]",
       "dependsOn": [
@@ -401,6 +402,7 @@
         "httpsOnly": true,
         "siteConfig": {
           "alwaysOn": false,
+          "ftpsState": "Disabled",
           "appSettings": [
             {
               "name": "SITE_ROLE",
@@ -518,7 +520,7 @@
     },
     {
       "type": "Microsoft.Web/sites",
-      "apiVersion": "2016-08-01",
+      "apiVersion": "2018-11-01",
       "name": "[variables('functionAppName')]",
       "location": "[parameters('location')]",
       "dependsOn": [
@@ -533,6 +535,7 @@
         "clientAffinityEnabled": false,
         "siteConfig": {
           "alwaysOn": "[not(variables('isSharedPlan'))]",
+          "ftpsState": "Disabled",
           "appSettings": [
             {
               "name": "PROJECT",
@@ -600,7 +603,7 @@
       "resources": [
         {
           "type": "sourcecontrols",
-          "apiVersion": "2015-08-01",
+          "apiVersion": "2018-11-01",
           "name": "web",
           "dependsOn": [
             "[resourceId('Microsoft.Web/sites', variables('functionAppName'))]"
@@ -616,7 +619,7 @@
     },
     {
       "type": "Microsoft.Web/sites",
-      "apiVersion": "2016-08-01",
+      "apiVersion": "2018-11-01",
       "name": "[variables('qnaMakerAppServiceName')]",
       "location": "[parameters('location')]",
       "properties": {
@@ -657,7 +660,7 @@
           }
         },
         {
-          "apiVersion": "2015-08-01",
+          "apiVersion": "2018-11-01",
           "name": "appsettings",
           "type": "config",
           "dependsOn": [
