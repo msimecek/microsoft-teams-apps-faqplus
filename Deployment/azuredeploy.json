@@ -348,6 +348,9 @@
         "[resourceId('Microsoft.Insights/components/', variables('configAppInsightsName'))]"
       ],
       "kind": "app",
+      "identity": {
+          "type": "SystemAssigned"
+      },
       "properties": {
         "name": "[variables('configAppName')]",
         "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]",
@@ -362,53 +365,7 @@
         "httpsOnly": true,
         "siteConfig": {
           "alwaysOn": false,
-          "ftpsState": "Disabled",
-          "appSettings": [
-            {
-              "name": "SITE_ROLE",
-              "value": "configuration"
-            },
-            {
-              "name": "StorageConnectionString",
-              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')),'2015-05-01-preview').key1)]"
-            },
-            {
-              "name": "QnAMakerApiEndpointUrl",
-              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts/', variables('qnaMakerAccountName')), '2017-04-18').endpoint]"
-            },
-            {
-              "name": "QnAMakerSubscriptionKey",
-              "value": "[listKeys(resourceId('Microsoft.CognitiveServices/accounts/', variables('qnaMakerAccountName')), '2017-04-18').key1]"
-            },
-            {
-              "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
-              "value": "[reference(resourceId('Microsoft.Insights/components/', variables('configAppInsightsName')), '2015-05-01').InstrumentationKey]"
-            },
-            {
-              "name": "ida:AADInstance",
-              "value": "https://login.microsoftonline.com/"
-            },
-            {
-              "name": "ida:ClientId",
-              "value": "[parameters('configAppClientId')]"
-            },
-            {
-              "name": "ida:TenantId",
-              "value": "[parameters('tenantId')]"
-            },
-            {
-              "name": "ida:RedirectUri",
-              "value": "[variables('configAppUrl')]"
-            },
-            {
-              "name": "ida:PostLogoutRedirectUri",
-              "value": "[variables('configAppUrl')]"
-            },
-            {
-              "name": "ValidUpns",
-              "value": "[parameters('configAdminUPNList')]"
-            }
-          ]
+          "ftpsState": "Disabled"
         }
       },
       "resources": [
@@ -427,6 +384,30 @@
           }
         }
       ]
+    },
+       {
+        "type": "Microsoft.Web/sites/config",
+        "apiVersion": "2018-11-01",
+        "name": "[concat(variables('configAppName'), '/appsettings')]",
+        "location": "[resourceGroup().location]",
+        "dependsOn": [
+            "[resourceId('Microsoft.Web/sites', variables('configAppName'))]",
+            "[resourceId('Microsoft.KeyVault/vaults/', variables('keyVaultName'))]"
+        ],
+        "properties": {
+            "SITE_ROLE": "configuration",
+            "ida:AADInstance": "https://login.microsoftonline.com/",
+            "ida:ClientId": "[parameters('configAppClientId')]",
+            "ida:TenantId": "[parameters('tenantId')]",
+            "ida:RedirectUri": "[variables('configAppUrl')]",
+            "ida:PostLogoutRedirectUri": "[variables('configAppUrl')]",
+            "ValidUpns": "[parameters('configAdminUPNList')]",
+            "StorageConnectionString": "[concat('@Microsoft.KeyVault(SecretUri=', reference(resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), 'StorageConnectionString')).secretUri, ')')]",
+            "APPINSIGHTS_INSTRUMENTATIONKEY": "[concat('@Microsoft.KeyVault(SecretUri=', reference(resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), 'AppInsightsInstrumentationKey')).secretUri, ')')]",
+            "QnAMakerHostUrl": "[concat('https://', reference(resourceId('Microsoft.Web/sites', variables('qnaMakerAppServiceName'))).hostNames[0])]",
+            "QnAMakerSubscriptionKey": "[concat('@Microsoft.KeyVault(SecretUri=', reference(resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), 'QnAMakerSubscriptionKey')).secretUri, ')')]",
+            "QnAMakerApiEndpointUrl": "[reference(resourceId('Microsoft.CognitiveServices/accounts/', variables('qnaMakerAccountName')), '2017-04-18').endpoint]"
+        }
     },
     {
       "apiVersion": "2015-05-01",
@@ -656,6 +637,13 @@
               {
                   "tenantId": "[reference(resourceId('Microsoft.Web/sites', variables('botAppName')),'2020-06-01', 'Full').identity.tenantId]",
                   "objectId": "[reference(resourceId('Microsoft.Web/sites', variables('botAppName')),'2020-06-01', 'Full').identity.principalId]",
+                  "permissions": {
+                      "secrets": [ "get" ]
+                  }
+              },
+              {
+                  "tenantId": "[reference(resourceId('Microsoft.Web/sites', variables('configAppName')),'2020-06-01', 'Full').identity.tenantId]",
+                  "objectId": "[reference(resourceId('Microsoft.Web/sites', variables('configAppName')),'2020-06-01', 'Full').identity.principalId]",
                   "permissions": {
                       "secrets": [ "get" ]
                   }
