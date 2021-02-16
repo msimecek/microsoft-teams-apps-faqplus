@@ -153,7 +153,6 @@
     "functionAppName": "[concat(parameters('baseResourceName'), '-function')]",
     "configAppName": "[concat(parameters('baseResourceName'), '-config')]",
     "configAppUrl": "[concat('https://', variables('configAppName'), '.azurewebsites.net')]",
-    "configAppInsightsName": "[concat(parameters('baseResourceName'), '-config')]",
     "qnaMakerAccountName": "[parameters('baseResourceName')]",
     "qnaMakerLocation": "westus",
     "qnaMakerAppServiceName": "[concat(parameters('baseResourceName'), '-qnamaker')]",
@@ -345,7 +344,7 @@
         "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]",
         "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
         "[resourceId('Microsoft.CognitiveServices/accounts/', variables('qnaMakerAccountName'))]",
-        "[resourceId('Microsoft.Insights/components/', variables('configAppInsightsName'))]"
+        "[resourceId('Microsoft.Insights/components/', variables('botAppInsightsName'))]"
       ],
       "kind": "app",
       "identity": {
@@ -410,19 +409,6 @@
         }
     },
     {
-      "apiVersion": "2015-05-01",
-      "name": "[variables('configAppInsightsName')]",
-      "type": "Microsoft.Insights/components",
-      "location": "[parameters('location')]",
-      "tags": {
-        "[concat('hidden-link:', resourceGroup().id, '/providers/Microsoft.Web/sites/', variables('configAppName'))]": "Resource"
-      },
-      "properties": {
-        "Application_Type": "web",
-        "Request_Source": "rest"
-      }
-    },
-    {
       "type": "Microsoft.CognitiveServices/accounts",
       "kind": "QnAMaker",
       "name": "[variables('qnaMakerAccountName')]",
@@ -469,6 +455,9 @@
         "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
       ],
       "kind": "functionapp",
+      "identity": {
+          "type": "SystemAssigned"
+      },
       "properties": {
         "name": "[variables('functionAppName')]",
         "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]",
@@ -476,69 +465,7 @@
         "clientAffinityEnabled": false,
         "siteConfig": {
           "alwaysOn": "[not(variables('isSharedPlan'))]",
-          "ftpsState": "Disabled",
-          "appSettings": [
-            {
-              "name": "PROJECT",
-              "value": "Source/Microsoft.Teams.Apps.FAQPlusPlus.AzureFunction/Microsoft.Teams.Apps.FAQPlusPlus.AzureFunction.csproj"
-            },
-            {
-              "name": "SITE_ROLE",
-              "value": "function"
-            },
-            {
-              "name": "AzureWebJobsStorage",
-              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageAccountName'),';AccountKey=',listkeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2015-05-01-preview').key1,';')]"
-            },
-            {
-              "name": "AzureWebJobsDashboard",
-              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageAccountName'),';AccountKey=',listkeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2015-05-01-preview').key1,';')]"
-            },
-            {
-              "name": "FUNCTIONS_EXTENSION_VERSION",
-              "value": "~2"
-            },
-            {
-              "name": "FUNCTIONS_WORKER_RUNTIME",
-              "value": "dotnet"
-            },
-            {
-              "name": "QnAMakerApiUrl",
-              "value": "https://westus.api.cognitive.microsoft.com"
-            },
-            {
-              "name": "QnAMakerSubscriptionKey",
-              "value": "[listKeys(resourceId('Microsoft.CognitiveServices/accounts/', variables('qnaMakerAccountName')), '2017-04-18').key1]"
-            },
-            {
-              "name": "SearchServiceName",
-              "value": "[variables('azureSearchName')]"
-            },
-            {
-              "name": "SearchServiceAdminApiKey",
-              "value": "[listAdminKeys(resourceId('Microsoft.Search/searchServices/', variables('azureSearchName')), '2015-08-19').primaryKey]"
-            },
-            {
-              "name": "SearchServiceQueryApiKey",
-              "value": "[listQueryKeys(resourceId('Microsoft.Search/searchServices/', variables('azureSearchName')), '2015-08-19').value[0].key]"
-            },
-            {
-              "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
-              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')),'2015-05-01-preview').key1)]"
-            },
-            {
-              "name": "WEBSITE_CONTENTSHARE",
-              "value": "[toLower(variables('functionAppName'))]"
-            },
-            {
-              "name": "StorageConnectionString",
-              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')),'2015-05-01-preview').key1)]"
-            },
-            {
-              "name": "WEBSITE_NODE_DEFAULT_VERSION",
-              "value": "10.14.1"
-            }
-          ]
+          "ftpsState": "Disabled"
         }
       },
       "resources": [
@@ -557,6 +484,33 @@
           "condition": "[not(empty(parameters('gitRepoUrl')))]"
         }
       ]
+    },
+    {
+        "type": "Microsoft.Web/sites/config",
+        "apiVersion": "2018-11-01",
+        "name": "[concat(variables('functionAppName'), '/appsettings')]",
+        "location": "[resourceGroup().location]",
+        "dependsOn": [
+            "[resourceId('Microsoft.Web/sites', variables('functionAppName'))]",
+            "[resourceId('Microsoft.KeyVault/vaults/', variables('keyVaultName'))]"
+        ],
+        "properties": {
+            "PROJECT": "Source/Microsoft.Teams.Apps.FAQPlusPlus.AzureFunction/Microsoft.Teams.Apps.FAQPlusPlus.AzureFunction.csproj",
+            "SITE_ROLE": "function",
+            "FUNCTIONS_EXTENSION_VERSION": "~2",
+            "FUNCTIONS_WORKER_RUNTIME": "dotnet",
+            "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING": "[concat('@Microsoft.KeyVault(SecretUri=', reference(resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), 'StorageConnectionString')).secretUri, ')')]",
+            "WEBSITE_CONTENTSHARE": "[toLower(variables('functionAppName'))]",
+            
+            "AzureWebJobsStorage": "[concat('@Microsoft.KeyVault(SecretUri=', reference(resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), 'StorageConnectionString')).secretUri, ')')]",
+            "AzureWebJobsDashboard": "[concat('@Microsoft.KeyVault(SecretUri=', reference(resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), 'StorageConnectionString')).secretUri, ')')]",
+            "StorageConnectionString": "[concat('@Microsoft.KeyVault(SecretUri=', reference(resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), 'StorageConnectionString')).secretUri, ')')]",
+            "SearchServiceName": "[variables('azureSearchName')]",
+            "SearchServiceAdminApiKey": "[concat('@Microsoft.KeyVault(SecretUri=', reference(resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), 'SearchServiceAdminApiKey')).secretUri, ')')]",
+            "SearchServiceQueryApiKey": "[concat('@Microsoft.KeyVault(SecretUri=', reference(resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), 'SearchServiceQueryApiKey')).secretUri, ')')]",
+            "QnAMakerSubscriptionKey": "[concat('@Microsoft.KeyVault(SecretUri=', reference(resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), 'QnAMakerSubscriptionKey')).secretUri, ')')]",
+            "QnAMakerApiUrl": "https://westus.api.cognitive.microsoft.com"
+        }
     },
     {
       "type": "Microsoft.Web/sites",
@@ -644,6 +598,13 @@
               {
                   "tenantId": "[reference(resourceId('Microsoft.Web/sites', variables('configAppName')),'2020-06-01', 'Full').identity.tenantId]",
                   "objectId": "[reference(resourceId('Microsoft.Web/sites', variables('configAppName')),'2020-06-01', 'Full').identity.principalId]",
+                  "permissions": {
+                      "secrets": [ "get" ]
+                  }
+              },
+              {
+                  "tenantId": "[reference(resourceId('Microsoft.Web/sites', variables('functionAppName')),'2020-06-01', 'Full').identity.tenantId]",
+                  "objectId": "[reference(resourceId('Microsoft.Web/sites', variables('functionAppName')),'2020-06-01', 'Full').identity.principalId]",
                   "permissions": {
                       "secrets": [ "get" ]
                   }
