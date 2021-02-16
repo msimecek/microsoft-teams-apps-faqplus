@@ -172,7 +172,8 @@
       "Shared"
     ],
     "isSharedPlan": "[contains(variables('sharedSkus'), parameters('sku'))]",
-    "skuFamily": "[if(equals(parameters('sku'), 'Shared'), 'D', take(parameters('sku'), 1))]"
+    "skuFamily": "[if(equals(parameters('sku'), 'Shared'), 'D', take(parameters('sku'), 1))]",
+    "keyVaultName": "[concat(parameters('baseResourceName'), '-kv')]"
   },
   "resources": [
     {
@@ -209,6 +210,9 @@
       "name": "[variables('botAppName')]",
       "location": "[parameters('location')]",
       "kind": "app",
+      "identity": {
+          "type": "SystemAssigned"
+      },
       "properties": {
         "name": "[variables('botAppName')]",
         "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]",
@@ -222,86 +226,12 @@
         "httpsOnly": true,
         "siteConfig": {
           "alwaysOn": true,
-          "ftpsState": "Disabled",
-          "appSettings": [
-            {
-              "name": "SITE_ROLE",
-              "value": "bot"
-            },
-            {
-              "name": "MicrosoftAppId",
-              "value": "[parameters('botClientId')]"
-            },
-            {
-              "name": "MicrosoftAppPassword",
-              "value": "[parameters('botClientSecret')]"
-            },
-            {
-              "name": "StorageConnectionString",
-              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')),'2015-05-01-preview').key1)]"
-            },
-            {
-              "name": "QnAMakerHostUrl",
-              "value": "[concat('https://', reference(resourceId('Microsoft.Web/sites', variables('qnaMakerAppServiceName'))).hostNames[0])]"
-            },
-            {
-              "name": "TenantId",
-              "value": "[parameters('tenantId')]"
-            },
-            {
-              "name": "AppBaseUri",
-              "value": "[concat('https://', variables('botAppDomain'))]"
-            },
-            {
-              "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
-              "value": "[reference(resourceId('Microsoft.Insights/components/', variables('botAppInsightsName')), '2015-05-01').InstrumentationKey]"
-            },
-            {
-              "name": "ScoreThreshold",
-              "value": "0.5"
-            },
-            {
-              "name": "SearchServiceName",
-              "value": "[variables('azureSearchName')]"
-            },
-            {
-              "name": "SearchServiceAdminApiKey",
-              "value": "[listAdminKeys(resourceId('Microsoft.Search/searchServices/', variables('azureSearchName')), '2015-08-19').primaryKey]"
-            },
-            {
-              "name": "SearchServiceQueryApiKey",
-              "value": "[listQueryKeys(resourceId('Microsoft.Search/searchServices/', variables('azureSearchName')), '2015-08-19').value[0].key]"
-            },
-            {
-              "name": "AccessCacheExpiryInDays",
-              "value": "5"
-            },
-            {
-              "name": "SearchIndexingIntervalInMinutes",
-              "value": "10"
-            },
-            {
-              "name": "QnAMakerSubscriptionKey",
-              "value": "[listKeys(resourceId('Microsoft.CognitiveServices/accounts/', variables('qnaMakerAccountName')), '2017-04-18').key1]"
-            },
-            {
-              "name": "QnAMakerApiEndpointUrl",
-              "value": "https://westus.api.cognitive.microsoft.com"
-            },
-            {
-              "name": "ApplicationInsightsLogLevel",
-              "value": "Information"
-            }
-          ]
+          "ftpsState": "Disabled"
         }
       },
       "dependsOn": [
         "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
-        "[resourceId('Microsoft.Web/sites', variables('qnaMakerAppServiceName'))]",
-        "[resourceId('Microsoft.CognitiveServices/accounts/', variables('qnaMakerAccountName'))]",
-        "[resourceId('Microsoft.Search/searchServices/', variables('azureSearchName'))]",
-        "[resourceId('Microsoft.Insights/components/', variables('botAppInsightsName'))]"
+        "[resourceId('Microsoft.Web/sites', variables('qnaMakerAppServiceName'))]"
       ],
       "resources": [
         {
@@ -319,6 +249,35 @@
           }
         }
       ]
+    },
+    {
+        "type": "Microsoft.Web/sites/config",
+        "apiVersion": "2018-11-01",
+        "name": "[concat(variables('botAppName'), '/appsettings')]",
+        "location": "[resourceGroup().location]",
+        "dependsOn": [
+            "[resourceId('Microsoft.Web/sites', variables('botAppName'))]",
+            "[resourceId('Microsoft.KeyVault/vaults/', variables('keyVaultName'))]"
+        ],
+        "properties": {
+            "SITE_ROLE": "bot",
+            "TenantId": "[parameters('tenantId')]",
+            "AppBaseUri": "[concat('https://', variables('botAppDomain'))]",
+            "ScoreThreshold": "0.5",
+            "AccessCacheExpiryInDays": "5",
+            "SearchIndexingIntervalInMinutes": "10",
+            "ApplicationInsightsLogLevel": "Information",
+            "MicrosoftAppId": "[parameters('botClientId')]",
+            "MicrosoftAppPassword": "[concat('@Microsoft.KeyVault(SecretUri=', reference(resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), 'BotClientSecret')).secretUri, ')')]",
+            "StorageConnectionString": "[concat('@Microsoft.KeyVault(SecretUri=', reference(resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), 'StorageConnectionString')).secretUri, ')')]",
+            "APPINSIGHTS_INSTRUMENTATIONKEY": "[concat('@Microsoft.KeyVault(SecretUri=', reference(resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), 'AppInsightsInstrumentationKey')).secretUri, ')')]",
+            "SearchServiceName": "[variables('azureSearchName')]",
+            "SearchServiceAdminApiKey": "[concat('@Microsoft.KeyVault(SecretUri=', reference(resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), 'SearchServiceAdminApiKey')).secretUri, ')')]",
+            "SearchServiceQueryApiKey": "[concat('@Microsoft.KeyVault(SecretUri=', reference(resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), 'SearchServiceQueryApiKey')).secretUri, ')')]",
+            "QnAMakerHostUrl": "[concat('https://', reference(resourceId('Microsoft.Web/sites', variables('qnaMakerAppServiceName'))).hostNames[0])]",
+            "QnAMakerSubscriptionKey": "[concat('@Microsoft.KeyVault(SecretUri=', reference(resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), 'QnAMakerSubscriptionKey')).secretUri, ')')]",
+            "QnAMakerApiEndpointUrl": "https://westus.api.cognitive.microsoft.com"
+        }
     },
     {
       "apiVersion": "2015-05-01",
@@ -679,6 +638,101 @@
             "QNAMAKER_EXTENSION_VERSION": "latest"
           }
         }
+      ]
+    },
+    {
+      "apiVersion": "2019-09-01",
+      "type": "Microsoft.KeyVault/vaults",
+      "name": "[variables('keyVaultName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+          "tenantId": "[subscription().tenantId]",
+          "sku": {
+              "name": "standard",
+              "family": "A"
+          },
+          "accessPolicies": [
+              {
+                  "tenantId": "[reference(resourceId('Microsoft.Web/sites', variables('botAppName')),'2020-06-01', 'Full').identity.tenantId]",
+                  "objectId": "[reference(resourceId('Microsoft.Web/sites', variables('botAppName')),'2020-06-01', 'Full').identity.principalId]",
+                  "permissions": {
+                      "secrets": [ "get" ]
+                  }
+              }
+          ]
+      },
+      "resources": [
+          {
+              "apiVersion": "2019-09-01",
+              "type": "secrets",
+              "name": "StorageConnectionString",
+              "dependsOn": [
+                  "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
+                  "[resourceId('Microsoft.KeyVault/vaults/', variables('keyVaultName'))]"
+              ],
+              "properties": {
+                  "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')),'2015-05-01-preview').key1)]"
+              }
+          },
+          {
+              "apiVersion": "2019-09-01",
+              "type": "secrets",
+              "name": "BotClientSecret",
+              "dependsOn": [
+                  "[resourceId('Microsoft.KeyVault/vaults/', variables('keyVaultName'))]"
+              ],
+              "properties": {
+                  "value": "[parameters('botClientSecret')]"
+              }
+          },
+          {
+              "apiVersion": "2019-09-01",
+              "type": "secrets",
+              "name": "AppInsightsInstrumentationKey",
+              "dependsOn": [
+                  "[resourceId('Microsoft.Insights/components/', variables('botAppInsightsName'))]",
+                  "[resourceId('Microsoft.KeyVault/vaults/', variables('keyVaultName'))]"
+              ],
+              "properties": {
+                  "value": "[reference(resourceId('Microsoft.Insights/components/', variables('botAppInsightsName')), '2015-05-01').InstrumentationKey]"
+              }
+          },
+          {
+              "apiVersion": "2019-09-01",
+              "type": "secrets",
+              "name": "SearchServiceAdminApiKey",
+              "dependsOn": [
+                  "[resourceId('Microsoft.Search/searchServices/', variables('azureSearchName'))]",
+                  "[resourceId('Microsoft.KeyVault/vaults/', variables('keyVaultName'))]"
+              ],
+              "properties": {
+                  "value": "[listAdminKeys(resourceId('Microsoft.Search/searchServices/', variables('azureSearchName')), '2015-08-19').primaryKey]"
+              }
+          },
+          {
+              "apiVersion": "2019-09-01",
+              "type": "secrets",
+              "name": "SearchServiceQueryApiKey",
+              "dependsOn": [
+                  "[resourceId('Microsoft.Search/searchServices/', variables('azureSearchName'))]",
+                  "[resourceId('Microsoft.KeyVault/vaults/', variables('keyVaultName'))]"
+              ],
+              "properties": {
+                  "value": "[listQueryKeys(resourceId('Microsoft.Search/searchServices/', variables('azureSearchName')), '2015-08-19').value[0].key]"
+              }
+          },
+          {
+              "apiVersion": "2019-09-01",
+              "type": "secrets",
+              "name": "QnAMakerSubscriptionKey",
+              "dependsOn": [
+                  "[resourceId('Microsoft.CognitiveServices/accounts/', variables('qnaMakerAccountName'))]",
+                  "[resourceId('Microsoft.KeyVault/vaults/', variables('keyVaultName'))]"
+              ],
+              "properties": {
+                  "value": "[listKeys(resourceId('Microsoft.CognitiveServices/accounts/', variables('qnaMakerAccountName')), '2017-04-18').key1]"
+              }
+          }
       ]
     }
   ],
